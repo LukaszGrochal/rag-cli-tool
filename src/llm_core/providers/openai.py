@@ -15,6 +15,8 @@ class OpenAIEmbeddingProvider:
     @with_retry(max_attempts=3)
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a list of texts."""
+        if not texts:
+            return []
         response = self._client.embeddings.create(
             model=self._model,
             input=texts,

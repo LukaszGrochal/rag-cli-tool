@@ -9,6 +9,12 @@ class RecursiveChunker(BaseChunker):
     """Splits text recursively using a hierarchy of separators."""
 
     def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200) -> None:
+        if chunk_size <= 0:
+            raise ValueError(f"chunk_size must be positive, got {chunk_size}")
+        if chunk_overlap < 0:
+            raise ValueError(f"chunk_overlap must be non-negative, got {chunk_overlap}")
+        if chunk_overlap >= chunk_size:
+            raise ValueError(f"chunk_overlap ({chunk_overlap}) must be less than chunk_size ({chunk_size})")
         self._chunk_size = chunk_size
         self._overlap = chunk_overlap
 

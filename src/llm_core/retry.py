@@ -13,11 +13,21 @@ from tenacity import (
 T = TypeVar("T")
 
 # Exception types that should trigger retries
-RETRYABLE_EXCEPTIONS = (
-    ConnectionError,
-    TimeoutError,
-    OSError,
-)
+_base_exceptions: list[type[Exception]] = [ConnectionError, TimeoutError, OSError]
+
+try:
+    import anthropic
+    _base_exceptions.extend([anthropic.RateLimitError, anthropic.InternalServerError])
+except ImportError:
+    pass
+
+try:
+    import openai
+    _base_exceptions.extend([openai.RateLimitError, openai.InternalServerError])
+except ImportError:
+    pass
+
+RETRYABLE_EXCEPTIONS = tuple(_base_exceptions)
 
 
 def with_retry(

@@ -44,12 +44,18 @@ _LOADERS: dict[str, callable] = {
 
 def load_documents(path: Path) -> list[Document]:
     """Recursively load all supported documents from a directory."""
+    import warnings
+
     documents: list[Document] = []
 
     for file_path in sorted(path.rglob("*")):
         if file_path.is_file() and file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
             loader = _LOADERS[file_path.suffix.lower()]
-            content = loader(file_path)
+            try:
+                content = loader(file_path)
+            except Exception as e:
+                warnings.warn(f"Skipping {file_path}: {e}", stacklevel=2)
+                continue
             if content.strip():
                 documents.append(Document(content=content, source=str(file_path)))
 

@@ -70,8 +70,8 @@ def index(
         raise typer.Exit(code=1)
 
     settings = _get_settings()
-    _chunk_size = chunk_size or settings.chunk_size
-    _chunk_overlap = chunk_overlap or settings.chunk_overlap
+    _chunk_size = chunk_size if chunk_size is not None else settings.chunk_size
+    _chunk_overlap = chunk_overlap if chunk_overlap is not None else settings.chunk_overlap
 
     from rag_core.loaders import load_documents
 
@@ -134,11 +134,15 @@ def index(
 
     batch_size = 100
     all_embeddings: list[list[float]] = []
-    for batch_start in track(range(0, len(new_chunks), batch_size), description="Embedding..."):
-        batch_end = min(batch_start + batch_size, len(new_chunks))
-        batch = new_chunks[batch_start:batch_end]
-        batch_embeddings = embedder.embed(batch)
-        all_embeddings.extend(batch_embeddings)
+    try:
+        for batch_start in track(range(0, len(new_chunks), batch_size), description="Embedding..."):
+            batch_end = min(batch_start + batch_size, len(new_chunks))
+            batch = new_chunks[batch_start:batch_end]
+            batch_embeddings = embedder.embed(batch)
+            all_embeddings.extend(batch_embeddings)
+    except Exception as e:
+        print_error(f"Embedding failed: {e}")
+        raise typer.Exit(code=1)
 
     store.add(
         ids=new_ids,
@@ -174,7 +178,7 @@ def ask(
         raise typer.Exit(code=1)
 
     settings = _get_settings()
-    _top_k = top_k or settings.top_k
+    _top_k = top_k if top_k is not None else settings.top_k
 
     from llm_core.providers.openai import OpenAIEmbeddingProvider
     from rag_core.embeddings import OpenAIEmbedder
@@ -195,7 +199,11 @@ def ask(
     retriever = SimilarityRetriever(embedder=embedder, store=store)
 
     console.print("[bold]Searching[/bold] for relevant context...")
-    results = retriever.retrieve(question, top_k=_top_k)
+    try:
+        results = retriever.retrieve(question, top_k=_top_k)
+    except Exception as e:
+        print_error(f"Retrieval failed: {e}")
+        raise typer.Exit(code=1)
 
     if not results:
         print_error("No relevant documents found for your question.")
@@ -227,7 +235,11 @@ Question: {question}
 Answer based ONLY on the context above."""
 
     console.print("[bold]Generating[/bold] answer...")
-    response = provider.generate(user_prompt, system=system_prompt)
+    try:
+        response = provider.generate(user_prompt, system=system_prompt)
+    except Exception as e:
+        print_error(f"Generation failed: {e}")
+        raise typer.Exit(code=1)
 
     from rag_cli.console import print_answer
 

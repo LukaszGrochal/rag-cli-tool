@@ -18,3 +18,28 @@ def test_default_settings():
         assert settings.chunk_size == 1000
         assert settings.chunk_overlap == 200
         assert settings.top_k == 3
+
+
+def test_settings_without_api_keys():
+    """Settings should load without API keys (they default to empty string)."""
+    with patch.dict(os.environ, {}, clear=True):
+        from llm_core.config import LLMSettings
+        settings = LLMSettings(_env_file=None)
+        assert settings.anthropic_api_key == ""
+        assert settings.openai_api_key == ""
+
+
+def test_ollama_host_default():
+    """ollama_host should default to localhost."""
+    with patch.dict(os.environ, {}, clear=True):
+        from llm_core.config import LLMSettings
+        settings = LLMSettings(_env_file=None)
+        assert settings.ollama_host == "http://localhost:11434"
+
+
+def test_ollama_host_override():
+    """ollama_host should be overridable via env var."""
+    with patch.dict(os.environ, {"RAG_CLI_OLLAMA_HOST": "http://remote:11434"}, clear=True):
+        from llm_core.config import LLMSettings
+        settings = LLMSettings(_env_file=None)
+        assert settings.ollama_host == "http://remote:11434"

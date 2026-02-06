@@ -27,6 +27,12 @@ try:
 except ImportError:
     pass
 
+try:
+    import ollama
+    _base_exceptions.append(ollama.ResponseError)
+except ImportError:
+    pass
+
 RETRYABLE_EXCEPTIONS = tuple(_base_exceptions)
 
 

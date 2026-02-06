@@ -208,3 +208,6 @@ __marimo__/
 
 # RAG CLI
 .rag-cli/
+docs
+.claude
+bash.exe.stackdump

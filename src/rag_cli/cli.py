@@ -18,19 +18,71 @@ app = typer.Typer(
 
 
 def _get_settings():
-    """Load settings, handling missing env vars gracefully."""
+    """Load settings, handling configuration errors gracefully."""
     try:
         from llm_core.config import LLMSettings
         return LLMSettings()
     except Exception as e:
-        error_msg = str(e)
-        if "ANTHROPIC_API_KEY" in error_msg:
-            print_error("ANTHROPIC_API_KEY not set. Required for answer generation.")
-        elif "OPENAI_API_KEY" in error_msg:
-            print_error("OPENAI_API_KEY not set. Required for embeddings.")
-        else:
-            print_error(f"Configuration error: {e}")
+        print_error(f"Configuration error: {e}")
         raise typer.Exit(code=1)
+
+
+def _create_embedder(settings):
+    """Create the appropriate embedder based on the embedding_model setting."""
+    from llm_core.config import parse_model_string
+
+    provider_name, model = parse_model_string(settings.embedding_model)
+
+    if provider_name == "ollama":
+        from llm_core.providers.ollama import OllamaEmbeddingProvider
+        from rag_core.embeddings.ollama import OllamaEmbedder
+
+        embedding_provider = OllamaEmbeddingProvider(
+            model=model,
+            host=settings.ollama_host,
+        )
+        return OllamaEmbedder(provider=embedding_provider)
+
+    # Default: OpenAI
+    if not settings.openai_api_key:
+        print_error(
+            "OPENAI_API_KEY not set. Required for embeddings "
+            "(or use 'ollama:' prefix, e.g. RAG_CLI_EMBEDDING_MODEL=ollama:nomic-embed-text)."
+        )
+        raise typer.Exit(code=1)
+
+    from llm_core.providers.openai import OpenAIEmbeddingProvider
+    from rag_core.embeddings.openai import OpenAIEmbedder
+
+    embedding_provider = OpenAIEmbeddingProvider(
+        api_key=settings.openai_api_key,
+        model=model,
+    )
+    return OpenAIEmbedder(provider=embedding_provider)
+
+
+def _create_llm_provider(settings):
+    """Create the appropriate LLM provider based on the model setting."""
+    from llm_core.config import parse_model_string
+
+    provider_name, model = parse_model_string(settings.model)
+
+    if provider_name == "ollama":
+        from llm_core.providers.ollama import OllamaProvider
+
+        return OllamaProvider(model=model, host=settings.ollama_host)
+
+    # Default: Anthropic
+    if not settings.anthropic_api_key:
+        print_error(
+            "ANTHROPIC_API_KEY not set. Required for answer generation "
+            "(or use 'ollama:' prefix, e.g. RAG_CLI_MODEL=ollama:llama3.2)."
+        )
+        raise typer.Exit(code=1)
+
+    from llm_core.providers.anthropic import AnthropicProvider
+
+    return AnthropicProvider(api_key=settings.anthropic_api_key, model=model)
 
 
 def _chunk_id(source: str, chunk_index: int) -> str:
@@ -123,14 +175,7 @@ def index(
 
     console.print(f"  Embedding {len(new_chunks)} new chunk(s)...")
 
-    from llm_core.providers.openai import OpenAIEmbeddingProvider
-    from rag_core.embeddings import OpenAIEmbedder
-
-    embedding_provider = OpenAIEmbeddingProvider(
-        api_key=settings.openai_api_key,
-        model=settings.embedding_model,
-    )
-    embedder = OpenAIEmbedder(provider=embedding_provider)
+    embedder = _create_embedder(settings)
 
     batch_size = 100
     all_embeddings: list[list[float]] = []
@@ -180,8 +225,6 @@ def ask(
     settings = _get_settings()
     _top_k = top_k if top_k is not None else settings.top_k
 
-    from llm_core.providers.openai import OpenAIEmbeddingProvider
-    from rag_core.embeddings import OpenAIEmbedder
     from rag_core.retrieval import SimilarityRetriever
     from rag_core.vectorstores import ChromaStore
 
@@ -191,11 +234,7 @@ def ask(
         print_error("Index is empty. Run 'rag-cli index <path>' first.")
         raise typer.Exit(code=1)
 
-    embedding_provider = OpenAIEmbeddingProvider(
-        api_key=settings.openai_api_key,
-        model=settings.embedding_model,
-    )
-    embedder = OpenAIEmbedder(provider=embedding_provider)
+    embedder = _create_embedder(settings)
     retriever = SimilarityRetriever(embedder=embedder, store=store)
 
     console.print("[bold]Searching[/bold] for relevant context...")
@@ -215,9 +254,7 @@ def ask(
         context_parts.append(f"[Source {i}: {source}]\n{result.document}")
     context = "\n\n---\n\n".join(context_parts)
 
-    from llm_core.providers.anthropic import AnthropicProvider
-
-    provider = AnthropicProvider(api_key=settings.anthropic_api_key, model=settings.model)
+    provider = _create_llm_provider(settings)
 
     system_prompt = (
         "You are a helpful assistant that answers questions based ONLY on the provided context. "
@@ -243,5 +280,7 @@ Answer based ONLY on the context above."""
 
     from rag_cli.console import print_answer
 
-    sources = [result.metadata for result in results]
+    # Suppress sources when the model couldn't answer from context
+    no_info = "don't have enough information" in response.text.lower()
+    sources = [] if no_info else [result.metadata for result in results]
     print_answer(response.text, sources)

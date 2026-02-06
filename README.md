@@ -2,49 +2,69 @@
 
 CLI tool for RAG over local documents. Index a folder, ask questions.
 
+## Prerequisites
+
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+
 ## Installation
 
 ```bash
-# Clone and install
 git clone <repo-url>
 cd rag-cli-tool
 uv venv && uv pip install -e .
 ```
 
+All commands below use `uv run rag-cli` to run within the virtual environment.
+
 ## Quick Start
 
-### Cloud providers (Anthropic + OpenAI)
+### Option A: Local with Ollama (no API keys)
+
+1. Install [Ollama](https://ollama.com) and pull models:
 
 ```bash
-# Set API keys
-export OPENAI_API_KEY=sk-...        # Required for embeddings
-export ANTHROPIC_API_KEY=sk-ant-...  # Required for answer generation
-
-# Index your documents
-rag-cli index ./my-docs/
-
-# Ask questions
-rag-cli ask "What is the refund policy?"
-```
-
-### Local with Ollama (no API keys needed)
-
-```bash
-# Install Ollama: https://ollama.com
-# Pull models
 ollama pull llama3.2
 ollama pull nomic-embed-text
-
-# Index and ask — fully local
-RAG_CLI_MODEL=ollama:llama3.2 RAG_CLI_EMBEDDING_MODEL=ollama:nomic-embed-text rag-cli index ./my-docs/
-RAG_CLI_MODEL=ollama:llama3.2 RAG_CLI_EMBEDDING_MODEL=ollama:nomic-embed-text rag-cli ask "What is the refund policy?"
 ```
 
-You can also mix-and-match — for example, use a local model for generation with cloud embeddings:
+2. Create a `.env` file:
+
+```
+RAG_CLI_MODEL=ollama:llama3.2
+RAG_CLI_EMBEDDING_MODEL=ollama:nomic-embed-text
+```
+
+3. Index and ask:
 
 ```bash
-export OPENAI_API_KEY=sk-...
-RAG_CLI_MODEL=ollama:llama3.2 rag-cli ask "What is the refund policy?"
+uv run rag-cli index ./my-docs/
+uv run rag-cli ask "What is the refund policy?"
+```
+
+### Option B: Cloud providers (Anthropic + OpenAI)
+
+1. Create a `.env` file:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+```
+
+2. Index and ask:
+
+```bash
+uv run rag-cli index ./my-docs/
+uv run rag-cli ask "What is the refund policy?"
+```
+
+### Mix-and-match
+
+You can combine local and cloud providers — for example, local generation with cloud embeddings:
+
+```
+OPENAI_API_KEY=sk-...
+RAG_CLI_MODEL=ollama:llama3.2
 ```
 
 ## Commands
@@ -54,34 +74,34 @@ RAG_CLI_MODEL=ollama:llama3.2 rag-cli ask "What is the refund policy?"
 Index documents from a folder into the local vector store.
 
 ```bash
-rag-cli index ./documents/
-rag-cli index ./documents/ --chunk-size 500 --chunk-overlap 50
-rag-cli index ./documents/ --fresh   # Wipe and rebuild index
+uv run rag-cli index ./documents/
+uv run rag-cli index ./documents/ --chunk-size 500 --chunk-overlap 50
+uv run rag-cli index ./documents/ --fresh   # Wipe and rebuild index
 ```
 
 Supported formats: `.pdf`, `.md`, `.txt`, `.docx`
 
-By default, indexing is incremental — only new documents are embedded. Use `--fresh` to wipe the existing index and rebuild from scratch.
+Indexing is incremental by default — only new documents are embedded. Use `--fresh` to wipe the existing index and rebuild from scratch.
 
 ### `rag-cli ask "<question>"`
 
 Ask a question about your indexed documents.
 
 ```bash
-rag-cli ask "What are the payment terms?"
-rag-cli ask "What are the payment terms?" --top-k 5
+uv run rag-cli ask "What are the payment terms?"
+uv run rag-cli ask "What are the payment terms?" --top-k 5
 ```
 
 The answer is generated using only the retrieved document context (strict RAG — no external knowledge).
 
 ## Configuration
 
-Set via environment variables or `.env` file:
+All settings can be set via environment variables or a `.env` file in the project root.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OPENAI_API_KEY` | `""` | OpenAI API key (for cloud embeddings) |
-| `ANTHROPIC_API_KEY` | `""` | Anthropic API key (for cloud generation) |
+| `ANTHROPIC_API_KEY` | | Anthropic API key (required for cloud generation) |
+| `OPENAI_API_KEY` | | OpenAI API key (required for cloud embeddings) |
 | `RAG_CLI_MODEL` | `claude-3-5-sonnet-latest` | LLM model for generation |
 | `RAG_CLI_EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model |
 | `RAG_CLI_OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL |
@@ -91,25 +111,25 @@ Set via environment variables or `.env` file:
 
 ### Model string format
 
-Use the `ollama:` prefix to select a local Ollama model:
+Use the `ollama:` prefix to route to a local Ollama model. No prefix uses the default cloud provider.
 
-| Setting | Example | Provider |
-|---------|---------|----------|
-| `RAG_CLI_MODEL=claude-3-5-sonnet-latest` | Cloud (Anthropic) | Anthropic API |
-| `RAG_CLI_MODEL=ollama:llama3.2` | Local (Ollama) | Ollama server |
-| `RAG_CLI_EMBEDDING_MODEL=text-embedding-3-small` | Cloud (OpenAI) | OpenAI API |
-| `RAG_CLI_EMBEDDING_MODEL=ollama:nomic-embed-text` | Local (Ollama) | Ollama server |
+| Variable | Value | Provider |
+|----------|-------|----------|
+| `RAG_CLI_MODEL` | `claude-3-5-sonnet-latest` | Anthropic API |
+| `RAG_CLI_MODEL` | `ollama:llama3.2` | Ollama (local) |
+| `RAG_CLI_EMBEDDING_MODEL` | `text-embedding-3-small` | OpenAI API |
+| `RAG_CLI_EMBEDDING_MODEL` | `ollama:nomic-embed-text` | Ollama (local) |
 
 ## Project Structure
 
 ```
 src/
-├── rag_cli/       # CLI-specific (Typer + Rich)
-├── llm_core/      # Reusable LLM abstraction layer
-└── rag_core/      # Reusable RAG pipeline components
+├── rag_cli/       # CLI interface (Typer + Rich)
+├── llm_core/      # LLM abstraction layer (providers, config, retry)
+└── rag_core/      # RAG pipeline (loaders, chunking, embeddings, retrieval)
 ```
 
-`llm_core` and `rag_core` are designed as independent, reusable packages that can be extracted to other projects.
+`llm_core` and `rag_core` are designed as independent, reusable packages.
 
 ## License
 

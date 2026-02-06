@@ -2,10 +2,19 @@
 name = "rag-cli-tool"
 version = "0.1.0"
 description = "CLI tool for RAG over local documents"
+readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
 authors = [
     { name = "Lukasz Grochal" }
+]
+keywords = ["rag", "cli", "ollama", "embeddings", "llm"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Environment :: Console",
 ]
 dependencies = [
     # CLI
